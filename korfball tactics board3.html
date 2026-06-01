@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Korfball Board">
+<meta name="theme-color" content="#1a1a2e">
+<title>コーフボール 作戦ボード</title>
+
+<!-- PWA Manifest (インライン) -->
+<script>
+const MANIFEST = {
+  name: 'コーフボール 作戦ボード',
+  short_name: 'Korfball',
+  description: 'コーフボール戦術ボード',
+  start_url: '.',
+  display: 'standalone',
+  background_color: '#1a1a2e',
+  theme_color: '#1a1a2e',
+  orientation: 'portrait',
+  icons: [
+    { src: 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><rect width="192" height="192" rx="24" fill="#1a1a2e"/><rect x="16" y="16" width="160" height="160" rx="8" fill="none" stroke="white" stroke-width="4"/><circle cx="96" cy="60" r="14" fill="#facc15"/><circle cx="96" cy="132" r="14" fill="#facc15"/><line x1="16" y1="96" x2="176" y2="96" stroke="white" stroke-width="3"/></svg>`), sizes: '192x192', type: 'image/svg+xml' },
+  ]
+};
+const blob = new Blob([JSON.stringify(MANIFEST)], {type:'application/json'});
+const manifestURL = URL.createObjectURL(blob);
+const link = document.createElement('link');
+link.rel = 'manifest'; link.href = manifestURL;
+document.currentScript.insertAdjacentElement('afterend', link);
+</script>
+<style>
+  :root {
+    --court-green: #2d6a2d;
+    --court-green-light: #3a7d3a;
+    --line-white: rgba(255,255,255,0.9);
+    --team-a-female: #f472b6;
+    --team-a-male: #60a5fa;
+    --team-b-female: #fb923c;
+    --team-b-male: #facc15;
+    --bg: #1a1a2e;
+    --panel: #16213e;
+    --accent: #e94560;
+    --text: #eaeaea;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; touch-action: none; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, 'Hiragino Sans', 'Yu Gothic', sans-serif;
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  /* ===== HEADER ===== */
+  header {
+    background: var(--panel);
+    border-bottom: 2px solid var(--accent);
+    padding: 6px 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    z-index: 100;
+    flex-shrink: 0;
+  }
+
+  header h1 {
+    font-family: -apple-system, 'Hiragino Sans', 'Yu Gothic', sans-serif;
+    font-weight: 700;
+    font-size: clamp(1rem, 4vw, 1.5rem);
+    letter-spacing: 2px;
+    color: var(--accent);
+    margin-right: auto;
+  }
+
+  .btn {
+    background: #0f3460;
+    border: 1px solid #1a5276;
+    color: var(--text);
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: clamp(0.65rem, 2vw, 0.78rem);
+    font-family: -apple-system, 'Hiragino Sans', 'Yu Gothic', sans-serif;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s;
+    white-space: nowrap;
+    user-select: none;
+  }
+  .btn:hover, .btn.active { background: var(--accent); border-color: var(--accent); }
+  .btn.danger { background: #5c1010; border-color: #8b1a1a; }
+  .btn.danger:hover { background: #b91c1c; border-color: #b91c1c; }
+  .btn.rec-active { background: #b91c1c; border-color: #ef4444; animation: pulse 1s infinite; }
+
+  @keyframes pulse {
+    0%,100% { opacity: 1; } 50% { opacity: 0.6; }
+  }
+
+  .separator { width: 1px; height: 22px; background: #333; margin: 0 2px; }
+
+  /* ===== COLOR PICKER ===== */
+  .color-dots { display: flex; gap: 5px; align-items: center; }
+  .color-dot {
+    width: 18px; height: 18px; border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer; transition: transform 0.1s;
+  }
+  .color-dot:hover { transform: scale(1.2); }
+  .color-dot.selected { border-color: #fff; transform: scale(1.2); }
+
+  .pen-size-wrap { display: flex; align-items: center; gap: 4px; font-size: 0.7rem; }
+  .pen-size-wrap input { width: 60px; accent-color: var(--accent); }
+
+  /* ===== MAIN ===== */
+  main {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  #court-wrap {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  #court-svg {
+    display: block;
+    max-width: 100%;
+    max-height: 100%;
+    touch-action: none;
+    user-select: none;
+  }
+
+  /* ===== DRAW CANVAS ===== */
+  #draw-canvas {
+    position: absolute;
+    top: 0; left: 0;
+    pointer-events: none;
+    touch-action: none;
+  }
+  #draw-canvas.draw-mode { pointer-events: all; cursor: crosshair; }
+
+  /* ===== PIECES ===== */
+  .piece {
+    cursor: grab;
+    transition: filter 0.1s;
+  }
+  .piece:active { cursor: grabbing; filter: drop-shadow(0 0 6px #fff); }
+  .piece circle { stroke-width: 2.5; }
+  .piece text { font-size: 9px; font-weight: 700; dominant-baseline: central; text-anchor: middle; pointer-events: none; }
+
+  /* ===== LEGEND ===== */
+  #legend {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    background: rgba(22,33,62,0.9);
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 0.65rem;
+    line-height: 1.8;
+    pointer-events: none;
+  }
+  .legend-row { display: flex; align-items: center; gap: 5px; }
+  .legend-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+
+  /* ===== RECORDING INDICATOR ===== */
+  #rec-indicator {
+    display: none;
+    position: fixed;
+    top: 12px; right: 12px;
+    background: #b91c1c;
+    color: #fff;
+    border-radius: 20px;
+    padding: 4px 10px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    z-index: 999;
+    animation: pulse 1s infinite;
+  }
+  #rec-indicator.show { display: flex; align-items: center; gap: 5px; }
+
+  @media (max-width: 480px) {
+    header { padding: 4px 8px; gap: 5px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🏐 KORFBALL BOARD</h1>
+
+  <!-- モード -->
+  <button class="btn active" id="btn-full" onclick="setCourtMode('full')">フルコート</button>
+  <button class="btn" id="btn-half" onclick="setCourtMode('half')">ハーフコート</button>
+
+  <div class="separator"></div>
+
+  <!-- ペンモード -->
+  <button class="btn" id="btn-pen" onclick="togglePen()">✏️ ペン</button>
+  <div class="pen-size-wrap">
+    太さ<input type="range" id="pen-size" min="1" max="12" value="3">
+  </div>
+  <div class="color-dots" id="color-dots"></div>
+
+  <div class="separator"></div>
+
+  <button class="btn danger" onclick="clearDraw()">🗑 消去</button>
+  <button class="btn" onclick="resetPieces()">↺ 駒リセット</button>
+  <button class="btn" id="btn-away" onclick="toggleAway()">👁 Away非表示</button>
+
+  <div class="separator"></div>
+
+  <button class="btn" id="btn-rec" onclick="toggleRecord()">⏺ 録画</button>
+  <button class="btn" id="btn-audio" onclick="toggleAudio()">🎙 録音</button>
+</header>
+
+<main>
+  <div id="court-wrap">
+    <svg id="court-svg" viewBox="0 0 400 600" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <pattern id="grass" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
+          <rect width="20" height="20" fill="#2d6a2d"/>
+          <rect width="10" height="20" fill="#327032" opacity="0.5"/>
+        </pattern>
+      </defs>
+
+      <!-- ===================== FULL COURT ===================== -->
+      <!--
+        実寸: 40m × 60m → viewBox 400 × 600 (余白各20px = 360×560 コート)
+        1m = 9px (360px / 40m)
+        ポール位置: 各エンドから中央列に立つ (ハーフ境界から 6.67m = 60px)
+          上ポール cy = 20 + 60 = 80
+          下ポール cy = 580 - 60 = 520
+        2.5mライン半径: 2.5m × 9 = 22.5 ≈ 23px
+        シュートゾーン半径(公式): 2.5m → 23px  ※シュートサークルは半径2.5mの円
+        ゾーン分割ライン: 縦 x = 20+120=140, 20+240=260 (全体の1/3,2/3 = 13.3m,26.6m)
+        センターライン: y = 300
+      -->
+      <g id="g-full">
+        <rect width="400" height="600" fill="url(#grass)"/>
+
+        <!-- コート外枠 -->
+        <rect x="20" y="20" width="360" height="560" fill="none" stroke="white" stroke-width="2.5"/>
+
+        <!-- センターライン -->
+        <line x1="20" y1="300" x2="380" y2="300" stroke="white" stroke-width="2"/>
+
+        <!-- 上ゴール (cy=104, エンドラインから9m) -->
+        <circle cx="200" cy="127" r="23" fill="none" stroke="#facc15" stroke-width="2" opacity="0.9"/>
+        <circle cx="200" cy="104" r="23" fill="none" stroke="#facc15" stroke-width="2" opacity="0.9"/>
+        <circle cx="200" cy="104" r="9" fill="#facc15" stroke="#facc15" stroke-width="2"/>
+
+        <!-- 下ゴール (cy=496, エンドラインから9m) -->
+        <circle cx="200" cy="473" r="23" fill="none" stroke="#facc15" stroke-width="2" opacity="0.9"/>
+        <circle cx="200" cy="496" r="23" fill="none" stroke="#facc15" stroke-width="2" opacity="0.9"/>
+        <circle cx="200" cy="496" r="9" fill="#facc15" stroke="#facc15" stroke-width="2"/>
+      </g>
+
+      <!-- ===================== HALF COURT ===================== -->
+      <!--
+        ハーフコート: コート下半分のみを拡大表示
+        viewBox そのままで下半分エリア (y 300-580) を拡大描画
+        元の1m=9px → ハーフ表示では y方向を2倍スケール: 1m = 16px
+        ポール位置: ハーフ下端 (y=20 からの距離 6.67m × 16 = ~107px → cy = 300-107+280 = 473)
+        ここでは中心をコート中央 (y=300) として下方向に描く
+        ゴール cy = 580 - (6.67m × 9.33px) = 580 - 62 = 518 → ハーフ拡大: cy = 490
+        2.5mライン半径: 2.5 × 16 = 40px
+        シュートゾーン: 6m × 16 = 96px
+      -->
+      <g id="g-half" display="none">
+        <rect width="400" height="600" fill="url(#grass)"/>
+        <rect x="20" y="20" width="360" height="560" fill="none" stroke="white" stroke-width="2.5"/>
+
+        <!-- センターライン (上端) -->
+        <line x1="20" y1="80" x2="380" y2="80" stroke="white" stroke-width="2"/>
+
+        <!-- ゴール (cy=430, エンドラインから9m) -->
+        <circle cx="200" cy="388" r="42" fill="none" stroke="#facc15" stroke-width="2.5" opacity="0.9"/>
+        <circle cx="200" cy="430" r="42" fill="none" stroke="#facc15" stroke-width="2.5" opacity="0.9"/>
+        <circle cx="200" cy="430" r="13" fill="#facc15" stroke="#facc15" stroke-width="2"/>
+      </g>
+
+      <!-- PIECES LAYER -->
+      <g id="pieces-layer"></g>
+    </svg>
+
+    <!-- Draw Canvas (overlay) -->
+    <canvas id="draw-canvas"></canvas>
+  </div>
+</main>
+
+<!-- REC indicator -->
+<div id="rec-indicator">
+  <span style="width:8px;height:8px;background:#fff;border-radius:50%;display:inline-block"></span>
+  REC
+</div>
+
+<!-- Legend -->
+<div id="legend">
+  <div style="font-weight:700;margin-bottom:4px;font-size:0.7rem;">凡例</div>
+  <div class="legend-row"><span class="legend-dot" style="background:#22c55e;border:2px solid white"></span>Home 女 (F)</div>
+  <div class="legend-row"><span class="legend-dot" style="background:#16a34a;border:2px solid white"></span>Home 男 (M)</div>
+  <div class="legend-row"><span class="legend-dot" style="background:#f87171;border:2px solid white"></span>Away 女 (F)</div>
+  <div class="legend-row"><span class="legend-dot" style="background:#dc2626;border:2px solid white"></span>Away 男 (M)</div>
+  <div class="legend-row"><span class="legend-dot" style="background:#facc15;border:3px solid #2563eb"></span>ボール</div>
+  <div class="legend-row"><span class="legend-dot" style="background:#facc15;border:2px solid #facc15"></span>ゴール</div>
+  <div class="legend-row"><span style="display:inline-block;width:22px;height:2px;background:#facc15;border-radius:1px;opacity:0.9"></span>2.5mライン</div>
+</div>
+
+<script>
+// ========== CONFIG ==========
+const PEN_COLORS = ['#ffffff','#ef4444','#22d3ee','#facc15','#4ade80','#f472b6','#a78bfa'];
+let penColor = PEN_COLORS[0];
+let penSize = 3;
+let drawMode = false;
+let isDrawing = false;
+let lastX = 0, lastY = 0;
+let courtMode = 'full'; // 'full' | 'half'
+
+// ========== PIECE DEFINITIONS ==========
+// コートエリア: x=20〜380, y=20〜580
+// サイドライン手前: x=45, x=355
+// エンドライン手前: y=40(上), y=560(下)
+// 反時計回り: 上=M1, 左=F1, 下=M2, 右=F2
+// ゴール: 上cy=82, 下cy=518, cx=200
+// ディフェンス: オフェンスとゴールの中間
+
+// 上コートオフェンス座標（反時計回り: 上M2→左F1→下M1→右F2）
+const TM1 = {x:200, y:270};   // M1: センターライン手前(下)
+const TF1 = {x:45,  y:190};   // F1: サイドライン手前(左)
+const TM2 = {x:200, y:40};    // M2: エンドライン手前(上) ※オフェンス
+const TF2 = {x:355, y:190};   // F2: サイドライン手前(右)
+const GT  = {x:200, y:104};   // 上ゴール
+// Away M2はゴール寄り(ディフェンス)
+const AM2 = {x:200, y:70};    // Away M2: ゴール直後ろ
+
+// 下コートオフェンス座標（反時計回り: 上M3→左F3→下M4→右F4）
+const BM3 = {x:200, y:330};   // M3: センターライン手前(上)
+const BF3 = {x:45,  y:410};   // F3: サイドライン手前(左)
+const BM4 = {x:200, y:560};   // M4: エンドライン手前(下) ※オフェンス
+const BF4 = {x:355, y:410};   // F4: サイドライン手前(右)
+const GB  = {x:200, y:496};   // 下ゴール
+// Home M4はゴール寄り(ディフェンス)
+const HM4 = {x:200, y:530};   // Home M4: ゴール直後ろ
+
+function mid(p, g) {
+  return { x: Math.round((p.x + g.x) / 2), y: Math.round((p.y + g.y) / 2) };
+}
+
+const PIECE_DEFS_FULL = [
+  // 上コート: Home オフェンス
+  {id:'hm1', team:'h', sex:'m', label:'M1', x:TM1.x, y:TM1.y},
+  {id:'hf1', team:'h', sex:'f', label:'F1', x:TF1.x, y:TF1.y},
+  {id:'hm2', team:'h', sex:'m', label:'M2', x:TM2.x, y:TM2.y},
+  {id:'hf2', team:'h', sex:'f', label:'F2', x:TF2.x, y:TF2.y},
+
+  // 上コート: Away ディフェンス（オフェンスとゴールの中間）
+  {id:'am1', team:'a', sex:'m', label:'M1', ...mid(TM1, GT)},
+  {id:'af1', team:'a', sex:'f', label:'F1', ...mid(TF1, GT)},
+  {id:'am2', team:'a', sex:'m', label:'M2', x:AM2.x, y:AM2.y},
+  {id:'af2', team:'a', sex:'f', label:'F2', ...mid(TF2, GT)},
+
+  // 下コート: Away オフェンス
+  {id:'am3', team:'a', sex:'m', label:'M3', x:BM3.x, y:BM3.y},
+  {id:'af3', team:'a', sex:'f', label:'F3', x:BF3.x, y:BF3.y},
+  {id:'am4', team:'a', sex:'m', label:'M4', x:BM4.x, y:BM4.y},
+  {id:'af4', team:'a', sex:'f', label:'F4', x:BF4.x, y:BF4.y},
+
+  // 下コート: Home ディフェンス（オフェンスとゴールの中間）
+  {id:'hm3', team:'h', sex:'m', label:'M3', ...mid(BM3, GB)},
+  {id:'hf3', team:'h', sex:'f', label:'F3', ...mid(BF3, GB)},
+  {id:'hm4', team:'h', sex:'m', label:'M4', x:HM4.x, y:HM4.y},
+  {id:'hf4', team:'h', sex:'f', label:'F4', ...mid(BF4, GB)},
+];
+
+// ハーフコート: 上コート8名のみ
+const PIECE_DEFS_HALF = PIECE_DEFS_FULL.slice(0, 8);
+
+// ボール定義（コート中央に配置）
+const BALL_DEF = {id:'ball', x:200, y:300};
+
+// Home: green shades / Away: red shades
+// Female = lighter, Male = darker (both same hue per team)
+const COLORS = {
+  hf: {fill:'#4ade80', stroke:'#ffffff', text:'#14532d'}, // Home Female: light green
+  hm: {fill:'#16a34a', stroke:'#ffffff', text:'#ffffff'}, // Home Male: dark green
+  af: {fill:'#f87171', stroke:'#ffffff', text:'#7f1d1d'}, // Away Female: light red
+  am: {fill:'#dc2626', stroke:'#ffffff', text:'#ffffff'}, // Away Male: dark red
+};
+
+// Current piece positions (x,y in SVG viewBox coords)
+let piecePositions = {};
+
+function getDefaultPositions() {
+  const defs = courtMode === 'full' ? PIECE_DEFS_FULL : PIECE_DEFS_HALF;
+  const pos = {};
+  defs.forEach(p => { pos[p.id] = {x: p.x, y: p.y}; });
+  // ボール: フルはセンター、ハーフは上コート中央
+  pos['ball'] = {x:200, y:256};
+  return pos;
+}
+
+// ========== INIT PIECES ==========
+function renderPieces() {
+  const layer = document.getElementById('pieces-layer');
+  layer.innerHTML = '';
+  const defs = courtMode === 'full' ? PIECE_DEFS_FULL : PIECE_DEFS_HALF;
+  defs.forEach(p => {
+    const colorKey = p.team + p.sex; // hf, hm, af, am
+    const c = COLORS[colorKey];
+    const pos = piecePositions[p.id] || {x: p.x, y: p.y};
+    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    g.setAttribute('class', 'piece');
+    g.setAttribute('data-id', p.id);
+    g.setAttribute('transform', `translate(${pos.x},${pos.y})`);
+
+    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    circle.setAttribute('r', '14');
+    circle.setAttribute('fill', c.fill);
+    circle.setAttribute('stroke', c.stroke);
+    circle.setAttribute('stroke-width', '2.5');
+    g.appendChild(circle);
+
+    // Label: M1~M4 / F1~F4
+    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    text.setAttribute('fill', c.text);
+    text.setAttribute('font-size', '9');
+    text.setAttribute('font-weight', '700');
+    text.setAttribute('dominant-baseline', 'central');
+    text.setAttribute('text-anchor', 'middle');
+    text.setAttribute('pointer-events', 'none');
+    text.textContent = p.label;
+    g.appendChild(text);
+
+    makeDraggable(g);
+    layer.appendChild(g);
+  });
+
+  // ===== ボール =====
+  const ballPos = piecePositions['ball'] || {x:200, y:256};
+  const bg = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  bg.setAttribute('class', 'piece');
+  bg.setAttribute('data-id', 'ball');
+  bg.setAttribute('transform', `translate(${ballPos.x},${ballPos.y})`);
+
+  const bc = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+  bc.setAttribute('r', '8');
+  bc.setAttribute('fill', '#facc15');
+  bc.setAttribute('stroke', '#2563eb');
+  bc.setAttribute('stroke-width', '2.5');
+  bg.appendChild(bc);
+
+  makeDraggable(bg);
+  layer.appendChild(bg);
+
+  // Away非表示状態を維持
+  if (awayHidden) {
+    layer.querySelectorAll('.piece[data-id^="a"]').forEach(el => {
+      el.style.display = 'none';
+    });
+  }
+}
+
+function resetPieces() {
+  piecePositions = getDefaultPositions();
+  renderPieces();
+}
+
+// ========== DRAGGING ==========
+function getSVGPoint(svg, clientX, clientY) {
+  const pt = svg.createSVGPoint();
+  pt.x = clientX; pt.y = clientY;
+  return pt.matrixTransform(svg.getScreenCTM().inverse());
+}
+
+function makeDraggable(el) {
+  const svg = document.getElementById('court-svg');
+  let startX, startY, origX, origY;
+  let active = false;
+
+  function onStart(cx, cy) {
+    if (drawMode) return;
+    active = true;
+    const pt = getSVGPoint(svg, cx, cy);
+    startX = pt.x; startY = pt.y;
+    const t = el.getAttribute('transform');
+    const m = t.match(/translate\(([^,]+),([^)]+)\)/);
+    origX = parseFloat(m[1]); origY = parseFloat(m[2]);
+    el.style.zIndex = 999;
+  }
+  function onMove(cx, cy) {
+    if (!active) return;
+    const pt = getSVGPoint(svg, cx, cy);
+    const nx = origX + (pt.x - startX);
+    const ny = origY + (pt.y - startY);
+    el.setAttribute('transform', `translate(${nx},${ny})`);
+    piecePositions[el.getAttribute('data-id')] = {x: nx, y: ny};
+  }
+  function onEnd() { active = false; }
+
+  el.addEventListener('mousedown', e => { e.preventDefault(); onStart(e.clientX, e.clientY); });
+  window.addEventListener('mousemove', e => { if (active) onMove(e.clientX, e.clientY); });
+  window.addEventListener('mouseup', onEnd);
+
+  el.addEventListener('touchstart', e => { e.preventDefault(); const t=e.touches[0]; onStart(t.clientX, t.clientY); }, {passive:false});
+  window.addEventListener('touchmove', e => { if (active){ const t=e.touches[0]; onMove(t.clientX, t.clientY); e.preventDefault(); } }, {passive:false});
+  window.addEventListener('touchend', onEnd);
+}
+
+// ========== COURT MODE ==========
+function setCourtMode(mode) {
+  courtMode = mode;
+  const svg = document.getElementById('court-svg');
+  if (mode === 'full') {
+    svg.setAttribute('viewBox', '0 0 400 600');
+    document.getElementById('g-full').setAttribute('display', '');
+    document.getElementById('g-half').setAttribute('display', 'none');
+  } else {
+    // 上半分(y:20〜300)をクローズアップ: 余白込みで y:0〜310
+    svg.setAttribute('viewBox', '0 0 400 310');
+    document.getElementById('g-full').setAttribute('display', '');
+    document.getElementById('g-half').setAttribute('display', 'none');
+  }
+  document.getElementById('btn-full').classList.toggle('active', mode==='full');
+  document.getElementById('btn-half').classList.toggle('active', mode==='half');
+  piecePositions = getDefaultPositions();
+  renderPieces();
+  resizeCanvas();
+  clearDraw();
+}
+
+// ========== PEN MODE ==========
+const canvas = document.getElementById('draw-canvas');
+const ctx = canvas.getContext('2d');
+
+function resizeCanvas() {
+  const svg = document.getElementById('court-svg');
+  const rect = svg.getBoundingClientRect();
+  canvas.style.left = rect.left - svg.parentElement.getBoundingClientRect().left + 'px';
+  canvas.style.top = rect.top - svg.parentElement.getBoundingClientRect().top + 'px';
+  canvas.width = rect.width;
+  canvas.height = rect.height;
+}
+
+window.addEventListener('resize', resizeCanvas);
+setTimeout(resizeCanvas, 200);
+
+function togglePen() {
+  drawMode = !drawMode;
+  canvas.classList.toggle('draw-mode', drawMode);
+  document.getElementById('btn-pen').classList.toggle('active', drawMode);
+}
+
+function getCanvasPos(e) {
+  const rect = canvas.getBoundingClientRect();
+  const isTouch = e.touches;
+  const clientX = isTouch ? e.touches[0].clientX : e.clientX;
+  const clientY = isTouch ? e.touches[0].clientY : e.clientY;
+  return { x: clientX - rect.left, y: clientY - rect.top };
+}
+
+canvas.addEventListener('mousedown', e => {
+  if (!drawMode) return;
+  isDrawing = true;
+  const p = getCanvasPos(e);
+  lastX = p.x; lastY = p.y;
+  ctx.beginPath();
+  ctx.moveTo(lastX, lastY);
+});
+canvas.addEventListener('mousemove', e => {
+  if (!drawMode || !isDrawing) return;
+  const p = getCanvasPos(e);
+  ctx.lineWidth = penSize;
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = penColor;
+  ctx.lineTo(p.x, p.y);
+  ctx.stroke();
+  lastX = p.x; lastY = p.y;
+});
+canvas.addEventListener('mouseup', () => { isDrawing = false; });
+
+canvas.addEventListener('touchstart', e => {
+  if (!drawMode) return;
+  e.preventDefault();
+  isDrawing = true;
+  const p = getCanvasPos(e);
+  lastX = p.x; lastY = p.y;
+  ctx.beginPath();
+  ctx.moveTo(lastX, lastY);
+}, {passive:false});
+canvas.addEventListener('touchmove', e => {
+  if (!drawMode || !isDrawing) return;
+  e.preventDefault();
+  const p = getCanvasPos(e);
+  ctx.lineWidth = penSize;
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = penColor;
+  ctx.lineTo(p.x, p.y);
+  ctx.stroke();
+  lastX = p.x; lastY = p.y;
+}, {passive:false});
+canvas.addEventListener('touchend', () => { isDrawing = false; });
+
+function clearDraw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+}
+
+document.getElementById('pen-size').addEventListener('input', e => {
+  penSize = parseInt(e.target.value);
+});
+
+// Color dots
+const dotsWrap = document.getElementById('color-dots');
+PEN_COLORS.forEach((c,i) => {
+  const dot = document.createElement('div');
+  dot.className = 'color-dot' + (i===0?' selected':'');
+  dot.style.background = c;
+  dot.style.border = c === '#ffffff' ? '2px solid #555' : '2px solid transparent';
+  dot.addEventListener('click', () => {
+    penColor = c;
+    document.querySelectorAll('.color-dot').forEach(d=>d.classList.remove('selected'));
+    dot.classList.add('selected');
+  });
+  dotsWrap.appendChild(dot);
+});
+
+// ========== RECORDING (Canvas録画: 作戦ボードのみ・ポインター非表示) ==========
+let mediaRecorder = null;
+let recordedChunks = [];
+let isRecording = false;
+let isAudioRecording = false;
+let audioStream = null;
+let audioRecorder = null;
+let audioChunks = [];
+let recAnimFrame = null;
+let recCanvas = null;
+let recCtx = null;
+
+async function toggleRecord() {
+  const btn = document.getElementById('btn-rec');
+  if (!isRecording) {
+    try {
+      // 録画用オフスクリーンCanvas作成
+      const svg = document.getElementById('court-svg');
+      const svgRect = svg.getBoundingClientRect();
+      recCanvas = document.createElement('canvas');
+      recCanvas.width  = Math.round(svgRect.width);
+      recCanvas.height = Math.round(svgRect.height);
+      recCtx = recCanvas.getContext('2d');
+
+      // マイク音声（任意）
+      let audioTracks = [];
+      try {
+        const mic = await navigator.mediaDevices.getUserMedia({audio:true});
+        audioTracks = mic.getAudioTracks();
+      } catch(_) { /* マイク不要なら無視 */ }
+
+      // SVG + ペン描画Canvasを合成してストリーム化
+      const stream = recCanvas.captureStream(30);
+      audioTracks.forEach(t => stream.addTrack(t));
+
+      recordedChunks = [];
+      const mime = getSupportedMimeType();
+      mediaRecorder = new MediaRecorder(stream, mime ? {mimeType: mime} : {});
+      mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
+      mediaRecorder.onstop = saveRecording;
+      mediaRecorder.start();
+      isRecording = true;
+      btn.textContent = '⏹ 停止';
+      btn.classList.add('rec-active');
+      document.getElementById('rec-indicator').classList.add('show');
+
+      // 毎フレームSVG+描画CanvasをrecCanvasに合成
+      function drawFrame() {
+        if (!isRecording) return;
+        // SVGをImageとして描画
+        const svgEl = document.getElementById('court-svg');
+        const serializer = new XMLSerializer();
+        const svgStr = serializer.serializeToString(svgEl);
+        const svgBlob = new Blob([svgStr], {type:'image/svg+xml'});
+        const url = URL.createObjectURL(svgBlob);
+        const img = new Image();
+        img.onload = () => {
+          recCtx.clearRect(0, 0, recCanvas.width, recCanvas.height);
+          recCtx.drawImage(img, 0, 0, recCanvas.width, recCanvas.height);
+          // ペン描画Canvasを重ねる
+          recCtx.drawImage(canvas, 0, 0, recCanvas.width, recCanvas.height);
+          URL.revokeObjectURL(url);
+          recAnimFrame = requestAnimationFrame(drawFrame);
+        };
+        img.onerror = () => {
+          URL.revokeObjectURL(url);
+          recAnimFrame = requestAnimationFrame(drawFrame);
+        };
+        img.src = url;
+      }
+      drawFrame();
+
+    } catch(err) {
+      alert('録画に失敗しました: ' + err.message);
+    }
+  } else {
+    isRecording = false;
+    if (recAnimFrame) cancelAnimationFrame(recAnimFrame);
+    mediaRecorder.stop();
+    btn.textContent = '⏺ 録画';
+    btn.classList.remove('rec-active');
+    document.getElementById('rec-indicator').classList.remove('show');
+  }
+}
+
+function getSupportedMimeType() {
+  const types = ['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm','video/mp4'];
+  for (const t of types) { if (MediaRecorder.isTypeSupported(t)) return t; }
+  return '';
+}
+
+function saveRecording() {
+  const blob = new Blob(recordedChunks, { type: 'video/webm' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'korfball_' + Date.now() + '.webm';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function toggleAudio() {
+  const btn = document.getElementById('btn-audio');
+  if (!isAudioRecording) {
+    try {
+      audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunks = [];
+      audioRecorder = new MediaRecorder(audioStream);
+      audioRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
+      audioRecorder.onstop = saveAudio;
+      audioRecorder.start();
+      isAudioRecording = true;
+      btn.textContent = '⏹ 録音停止';
+      btn.classList.add('rec-active');
+    } catch(err) {
+      alert('マイクの権限が必要です: ' + err.message);
+    }
+  } else {
+    audioRecorder.stop();
+    audioStream.getTracks().forEach(t => t.stop());
+    isAudioRecording = false;
+    btn.textContent = '🎙 録音';
+    btn.classList.remove('rec-active');
+  }
+}
+
+function saveAudio() {
+  const blob = new Blob(audioChunks, { type: 'audio/webm' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'korfball_audio_' + Date.now() + '.webm';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ========== AWAY TOGGLE ==========
+let awayHidden = false;
+
+function toggleAway() {
+  awayHidden = !awayHidden;
+  const btn = document.getElementById('btn-away');
+  const layer = document.getElementById('pieces-layer');
+  layer.querySelectorAll('.piece[data-id^="a"]').forEach(el => {
+    el.style.display = awayHidden ? 'none' : '';
+  });
+  btn.textContent = awayHidden ? '👁 Away表示' : '👁 Away非表示';
+  btn.classList.toggle('active', awayHidden);
+}
+
+
+piecePositions = getDefaultPositions();
+renderPieces();
+window.addEventListener('load', () => setTimeout(resizeCanvas, 300));
+
+// ========== PWA: SERVICE WORKER (インライン登録) ==========
+if ('serviceWorker' in navigator) {
+  const swCode = `
+const CACHE = 'korfball-v1';
+self.addEventListener('install', e => {
+  self.skipWaiting();
+});
+self.addEventListener('activate', e => {
+  e.waitUntil(clients.claim());
+});
+self.addEventListener('fetch', e => {
+  e.respondWith(
+    caches.match(e.request).then(cached => cached || fetch(e.request).catch(() => new Response('', {status: 408})))
+  );
+});
+  `;
+  const swBlob = new Blob([swCode], {type: 'application/javascript'});
+  const swURL = URL.createObjectURL(swBlob);
+  navigator.serviceWorker.register(swURL).catch(() => {});
+}
+</script>
+</body>
+</html>
